@@ -1,4 +1,4 @@
-package randoop.generation;
+package randoop.execution;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -8,6 +8,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import org.plumelib.util.CollectionsPlume;
+import randoop.generation.AbstractGenerator;
+import randoop.generation.CoverageTracker;
+import randoop.generation.ForwardGenerator;
+import randoop.generation.TypedOperationSelector;
 import randoop.main.GenInputsAbstract;
 import randoop.main.RandoopBug;
 import randoop.operation.CallableOperation;
