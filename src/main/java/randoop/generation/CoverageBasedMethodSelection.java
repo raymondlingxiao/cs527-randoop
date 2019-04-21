@@ -8,10 +8,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import org.plumelib.util.CollectionsPlume;
-import randoop.generation.AbstractGenerator;
-import randoop.generation.CoverageTracker;
-import randoop.generation.ForwardGenerator;
-import randoop.generation.TypedOperationSelector;
 import randoop.main.GenInputsAbstract;
 import randoop.main.RandoopBug;
 import randoop.operation.CallableOperation;
@@ -36,21 +32,21 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
 
   /**
    * Map from methods under test to the number of times they have been recently selected by the
-   * {@link ForwardGenerator} to construct a new sequence. This map is cleared every time branch
-   * coverage is recomputed.
+   * {@link randoop.generation.ForwardGenerator} to construct a new sequence. This map is cleared
+   * every time branch coverage is recomputed.
    */
   private final Map<TypedOperation, Integer> methodSelectionCounts = new HashMap<>();
 
   /**
    * Map from methods under test to the total number of times they have ever been successfully
-   * invoked by the {@link AbstractGenerator}. The integer value for a given method is
-   * non-decreasing during a run of Randoop.
+   * invoked by the {@link randoop.generation.AbstractGenerator}. The integer value for a given
+   * method is non-decreasing during a run of Randoop.
    */
   private final Map<TypedOperation, Integer> methodInvocationCounts = new HashMap<>();
 
   /**
-   * List of operations, identical to {@link ForwardGenerator}'s operation list. Used for making
-   * random, weighted selections for a method under test.
+   * List of operations, identical to {@link randoop.generation.ForwardGenerator}'s operation list.
+   * Used for making random, weighted selections for a method under test.
    */
   private final SimpleArrayList<TypedOperation> operationSimpleList;
 
@@ -118,8 +114,8 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
   }
 
   /**
-   * Selects a method under test for the {@link ForwardGenerator} to use to construct a new
-   * sequence. A method under test is randomly selected with a weighted probability.
+   * Selects a method under test for the {@link randoop.generation.ForwardGenerator} to use to
+   * construct a new sequence. A method under test is randomly selected with a weighted probability.
    *
    * @return the chosen {@code TypedOperation} for the new sequence
    */
