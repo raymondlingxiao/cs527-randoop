@@ -111,6 +111,9 @@ public class ForwardGenerator extends AbstractGenerator {
       case BLOODHOUND:
         this.operationSelector = new Bloodhound(operations, classesUnderTest);
         break;
+      case COVERAGEBASEDMETHODSELECTION:
+        this.operationSelector = new CoverageBasedMethodSelection(operations, classesUnderTest);
+        break;
       default:
         throw new Error("This can't happen");
     }
