@@ -131,6 +131,7 @@ public class Bloodhound implements TypedOperationSelector {
     // methods may not be uniform in cases where we have methods with "zero" branches and methods
     // with non-"zero" branches. This initialization depends on lastUpdateTime being initialized to
     // zero.
+
     updateBranchCoverageMaybe();
   }
 
@@ -211,7 +212,7 @@ public class Bloodhound implements TypedOperationSelector {
         System.out.println("Updating branch coverage information.");
       }
 
-      methodSelectionCounts.clear();
+      // methodSelectionCounts.clear();
       coverageTracker.updateBranchCoverageMap();
       updateWeightsForAllOperations();
       logMethodWeights();
@@ -355,6 +356,15 @@ public class Bloodhound implements TypedOperationSelector {
    */
   public void incrementSuccessfulInvocationCount(TypedOperation operation) {
     totalSuccessfulInvocations += 1;
+    /*
+    System.out.println("count:" + methodInvocationCounts);
+    System.out.println("operations:" + operation);
+
+    System.out.println("Test:" + methodInvocationCounts.get(operation));
+     */
+    if (!methodInvocationCounts.keySet().contains(operation)) {
+      methodInvocationCounts.put(operation, 0);
+    }
     int numSuccessfulInvocations = CollectionsPlume.incrementMap(methodInvocationCounts, operation);
     maxSuccM = Math.max(maxSuccM, numSuccessfulInvocations);
   }
