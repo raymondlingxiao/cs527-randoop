@@ -291,6 +291,7 @@ public abstract class AbstractGenerator {
       listenerMgr.explorationStart();
     }
 
+    //TODO:MODIFY CODES
     while (!shouldStop()) {
 
       // Notify listeners we are about to perform a generation step.
