@@ -528,9 +528,7 @@ public abstract class GenInputsAbstract extends CommandHandler {
      * The "Bloodhound" technique from the GRT paper prioritizes methods with lower branch coverage.
      */
     BLOODHOUND,
-    /**
-     * Our invention of a method selection technique
-     */
+    /** Our invention of a method selection technique */
     COVERAGEBASEDMETHODSELECTION
   }
 
