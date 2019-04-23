@@ -340,6 +340,8 @@ public class Bloodhound implements TypedOperationSelector {
     }
 
     methodWeights.put(operation, wmk);
+    System.out.println("operation:" + operation);
+    System.out.println(wmk);
 
     // Update the contribution of this method to the total weight of all methods under test.
     totalWeightOfMethodsUnderTest -= existingWeight;
@@ -355,6 +357,9 @@ public class Bloodhound implements TypedOperationSelector {
    */
   public void incrementSuccessfulInvocationCount(TypedOperation operation) {
     totalSuccessfulInvocations += 1;
+    if (!methodInvocationCounts.keySet().contains(operation)) {
+      methodInvocationCounts.put(operation, 0);
+    }
     int numSuccessfulInvocations = CollectionsPlume.incrementMap(methodInvocationCounts, operation);
     maxSuccM = Math.max(maxSuccM, numSuccessfulInvocations);
   }

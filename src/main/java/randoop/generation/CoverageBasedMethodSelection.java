@@ -2,14 +2,8 @@ package randoop.generation;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import org.plumelib.util.CollectionsPlume;
-import randoop.main.GenInputsAbstract;
-import randoop.main.RandoopBug;
 import randoop.operation.CallableOperation;
 import randoop.operation.EnumConstant;
 import randoop.operation.FieldGet;
@@ -18,17 +12,46 @@ import randoop.operation.MethodCall;
 import randoop.operation.TypedOperation;
 import randoop.sequence.Sequence;
 import randoop.types.ClassOrInterfaceType;
-import randoop.util.Randomness;
 import randoop.util.SimpleArrayList;
 
 public class CoverageBasedMethodSelection implements TypedOperationSelector {
+
+  class Pair {
+    TypedOperation operation;
+    Double score = 0.0;
+    long consumedTime = 0;
+    long lastSelectedTime = 0;
+
+    Pair(TypedOperation operation, long curTime) {
+      this.operation = operation;
+      this.lastSelectedTime = curTime;
+    }
+
+    Pair(TypedOperation operation, long consumedTime, Double curScore, long lastSelectedTime) {
+      this.operation = operation;
+      this.consumedTime = consumedTime;
+      this.score = curScore;
+      this.lastSelectedTime = lastSelectedTime;
+    }
+  }
+
+  private final PriorityQueue<Pair> queue =
+      new PriorityQueue<>(
+          new Comparator<Pair>() {
+            @Override
+            public int compare(Pair o1, Pair o2) {
+              if (o2.score - o1.score > 0) return 1;
+              else return 0;
+            }
+          });
+
   private final CoverageTracker coverageTracker;
 
   /**
    * Map from methods under test to their weights. These weights are dynamic and depend on branch
    * coverage.
    */
-  private final Map<TypedOperation, Double> methodWeights = new HashMap<>();
+  //  private final Map<TypedOperation, Double> methodWeights = new HashMap<>();
 
   /**
    * Map from methods under test to the number of times they have been recently selected by the
@@ -51,33 +74,21 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
   private final SimpleArrayList<TypedOperation> operationSimpleList;
 
   /**
-   * Parameter for balancing branch coverage and number of times a method was chosen. The name
-   * "alpha" and the specified value are both from the GRT paper.
-   */
-  private static final double alpha = 0.9;
-
-  /**
-   * Parameter for decreasing weights of methods between updates to coverage information. The name
-   * "p" and the specified value are both from the GRT paper.
-   */
-  private static final double p = 0.99;
-
-  /**
    * Time interval, in milliseconds, at which to recompute weights. The name "t" and the specified
    * value are both from the GRT paper.
    */
-  private static final long t = 50000;
+  //  private static final long t = 500;
 
   /** {@code System.currentTimeMillis()} when branch coverage was last updated. */
-  private long lastUpdateTime = 0;
+  //  private long lastUpdateTime = 0;
 
   /**
    * Branch coverage is recomputed after this many successful invocations (= this many new tests
    * were generated).
    */
-  private static final int branchCoverageInterval = 100;
+  //  private static final int branchCoverageInterval = 100;
 
-  /** The total number of successful invocations of all the methods under test. */
+  //  /** The total number of successful invocations of all the methods under test. */
   private int totalSuccessfulInvocations = 0;
 
   /**
@@ -91,7 +102,7 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
    * The total weight of all the methods that are under test. This is used by {@link Randomness} to
    * randomly select an element from a list of weighted elements.
    */
-  private double totalWeightOfMethodsUnderTest = 0;
+  //  private double totalWeightOfMethodsUnderTest = 0;
 
   /**
    * Initialize Bloodhound. Branch coverage information is initialized and all methods under test
@@ -105,12 +116,15 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
     this.operationSimpleList = new SimpleArrayList<>(operations);
     this.coverageTracker = new CoverageTracker(classesUnderTest);
 
+    for (TypedOperation operation : operationSimpleList) {
+      queue.offer(new Pair(operation, System.currentTimeMillis()));
+    }
     // Compute an initial weight for all methods under test. We also initialize the uncovered ratio
     // value of all methods under test by updating branch coverage information. The weights for all
     // methods may not be uniform in cases where we have methods with "zero" branches and methods
     // with non-"zero" branches. This initialization depends on lastUpdateTime being initialized to
     // zero.
-    updateBranchCoverageMaybe();
+    //    updateBranchCoverageMaybe();
   }
 
   /**
@@ -121,17 +135,22 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
    */
   @Override
   public TypedOperation selectOperation() {
+    if (queue.isEmpty()) return null;
+
+    Pair selectedPair = queue.poll();
+    TypedOperation selectedOperation = selectedPair.operation;
+
     // Periodically collect branch coverage and recompute weights for all methods under test.
-    updateBranchCoverageMaybe();
+    //    updateBranchCoverageMaybe();
 
     // Make a random, weighted choice for the next method.
-    TypedOperation selectedOperation =
-        Randomness.randomMemberWeighted(
-            operationSimpleList, methodWeights, totalWeightOfMethodsUnderTest);
+    //    TypedOperation selectedOperation =
+    //        Randomness.randomMemberWeighted(
+    //            operationSimpleList, methodWeights, totalWeightOfMethodsUnderTest);
 
     // Update the selected method's selection count and recompute its weight.
     CollectionsPlume.incrementMap(methodSelectionCounts, selectedOperation);
-    updateWeight(selectedOperation);
+    updateWeight(selectedPair);
 
     return selectedOperation;
   }
@@ -150,75 +169,60 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
    *       branchCoverageInteral} successful invocations (of any method under test).
    * </ul>
    */
-  private void updateBranchCoverageMaybe() {
-    boolean shouldUpdateBranchCoverage;
-
-    switch (GenInputsAbstract.bloodhound_update_mode) {
-      case TIME:
-        long currentTime = System.currentTimeMillis();
-        shouldUpdateBranchCoverage = currentTime - lastUpdateTime >= t;
-
-        // Update the last update time if we decide that it's time to update branch coverage
-        // information.
-        if (shouldUpdateBranchCoverage) {
-          lastUpdateTime = currentTime;
-        }
-        break;
-      case INVOCATIONS:
-        shouldUpdateBranchCoverage = totalSuccessfulInvocations % branchCoverageInterval == 0;
-
-        // If we decide that it's time to update the branch coverage information, we "reset" the
-        // totalSuccessfulInvocations to 1 (or we could have incremented it by 1). This is to
-        // prevent
-        // ourselves from immediately re-updating branch coverage information should it be the case
-        // that the next test sequence that is generated is not a regression test and thus
-        // totalSuccessfulInvocations is not recomputed causing shouldUpdateBranchCoverage to be
-        // true
-        // again.
-        if (shouldUpdateBranchCoverage) {
-          totalSuccessfulInvocations = 1;
-        }
-        break;
-      default:
-        throw new RandoopBug(
-            "Unhandled value for bloodhound_update_mode: "
-                + GenInputsAbstract.bloodhound_update_mode);
-    }
-
-    if (shouldUpdateBranchCoverage) {
-      if (GenInputsAbstract.bloodhound_logging) {
-        System.out.println("Updating branch coverage information.");
-      }
-
-      methodSelectionCounts.clear();
-      coverageTracker.updateBranchCoverageMap();
-      updateWeightsForAllOperations();
-      logMethodWeights();
-    }
-  }
+  //  private void updateBranchCoverageMaybe() {
+  //    boolean shouldUpdateBranchCoverage;
+  //
+  //    switch (GenInputsAbstract.bloodhound_update_mode) {
+  //      case TIME:
+  //        long currentTime = System.currentTimeMillis();
+  //        shouldUpdateBranchCoverage = currentTime - lastUpdateTime >= t;
+  //
+  //        // Update the last update time if we decide that it's time to update branch coverage
+  //        // information.
+  //        if (shouldUpdateBranchCoverage) {
+  //          lastUpdateTime = currentTime;
+  //        }
+  //        break;
+  //      default:
+  //        throw new RandoopBug(
+  //            "Unhandled value for bloodhound_update_mode: "
+  //                + GenInputsAbstract.bloodhound_update_mode);
+  //    }
+  //
+  //    if (shouldUpdateBranchCoverage) {
+  //      if (GenInputsAbstract.bloodhound_logging) {
+  //        System.out.println("Updating branch coverage information.");
+  //      }
+  //
+  //      methodSelectionCounts.clear();
+  //      coverageTracker.updateBranchCoverageMap();
+  //      updateWeightsForAllOperations();
+  //      logMethodWeights();
+  //    }
+  //  }
 
   /** For debugging, print all method weights to standard output. */
-  private void logMethodWeights() {
-    if (GenInputsAbstract.bloodhound_logging) {
-      System.out.println("Method name: method weight");
-      for (TypedOperation typedOperation : new TreeSet<>(methodWeights.keySet())) {
-        System.out.println(typedOperation.getName() + ": " + methodWeights.get(typedOperation));
-      }
-      System.out.println("--------------------------");
-    }
-  }
+  //  private void logMethodWeights() {
+  //    if (GenInputsAbstract.bloodhound_logging) {
+  //      System.out.println("Method name: method weight");
+  //      for (TypedOperation typedOperation : new TreeSet<>(methodWeights.keySet())) {
+  //        System.out.println(typedOperation.getName() + ": " + methodWeights.get(typedOperation));
+  //      }
+  //      System.out.println("--------------------------");
+  //    }
+  //  }
 
   /**
    * Computes and updates weights in {@code methodWeights} map for all methods under test.
    * Recomputes the {@code totalWeightOfMethodsUnderTest} to avoid problems with round-off error.
    */
-  private void updateWeightsForAllOperations() {
-    double totalWeight = 0;
-    for (TypedOperation operation : operationSimpleList) {
-      totalWeight += updateWeight(operation);
-    }
-    totalWeightOfMethodsUnderTest = totalWeight;
-  }
+  //  private void updateWeightsForAllOperations() {
+  ////    double totalWeight = 0;
+  //    for (TypedOperation operation : operationSimpleList) {
+  //        updateWeight(operation);
+  //    }
+  ////    totalWeightOfMethodsUnderTest = totalWeight;
+  //  }
 
   /**
    * Recompute weight for a method under test. A method under test is assigned a weight based on a
@@ -232,11 +236,16 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
    *
    * The weighting scheme is based on Bloodhound in the Guided Random Testing (GRT) paper.
    *
-   * @param operation method to compute weight for
+   * <p>
+   *
+   * @param selectedPair selected pair in queue
    * @return the updated weight for the given operation
    */
-  private double updateWeight(TypedOperation operation) {
+  private double updateWeight(Pair selectedPair) {
     // Remove type arguments, because Jacoco does not include type arguments when naming a method.
+
+    TypedOperation operation = selectedPair.operation;
+
     String methodName = operation.getName().replaceAll("<.*>\\.", ".");
 
     // Corresponds to uncovRatio(m) in the GRT paper.
@@ -290,41 +299,41 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
 
     // The number of successful invocations of this method. Corresponds to "succ(m)" in the GRT
     // paper.
-    Integer succM = methodInvocationCounts.get(operation);
-    if (succM == null) {
-      succM = 0;
-    }
+    //    Integer succM = methodInvocationCounts.get(operation);
+    //    if (succM == null) {
+    //      succM = 0;
+    //    }
 
     // Corresponds to w(m, 0) in the GRT paper.
-    double wm0 = alpha * uncovRatio + (1.0 - alpha) * (1.0 - (succM.doubleValue() / maxSuccM));
+    //    double wm0 = alpha * uncovRatio + (1.0 - alpha) * (1.0 - (succM.doubleValue() /
+    // maxSuccM));
 
     // Corresponds to w(m, k) in the GRT paper.
-    double wmk;
+    //    double wmk;
     // In the GRT paper, "k" is the number of times this method was selected since the last update
     // of branch coverage. It is reset to zero every time branch coverage is recomputed.
-    Integer k = methodSelectionCounts.get(operation);
-    if (k == null) {
-      wmk = wm0;
-    } else {
-      // Corresponds to the case where k >= 1 in the GRT paper.
-      double val1 = (-3.0 / Math.log(1.0 - p)) * (Math.pow(p, k) / k);
-      double val2 = 1.0 / Math.log(operationSimpleList.size() + 3.0);
-      wmk = Math.max(val1, val2) * wm0;
-    }
+    //    Integer k = methodSelectionCounts.get(operation);
+    //    if (k == null) {
+    //      wmk = wm0;
+    //    } else {
+    //      // Corresponds to the case where k >= 1 in the GRT paper.
+    //      double val1 = (-3.0 / Math.log(1.0 - p)) * (Math.pow(p, k) / k);
+    //      double val2 = 1.0 / Math.log(operationSimpleList.size() + 3.0);
+    //      wmk = Math.max(val1, val2) * wm0;
+    //    }
 
     // Retrieve the weight from the methodWeights map if it exists. Otherwise, default to zero.
-    Double existingWeight = methodWeights.get(operation);
-    if (existingWeight == null) {
-      existingWeight = 0.0;
-    }
 
-    methodWeights.put(operation, wmk);
+    //    Double prevScore = selectedPair.score;
+    long currentTime = System.currentTimeMillis();
+    long curConsumedTime = currentTime - selectedPair.lastSelectedTime + selectedPair.consumedTime;
+    Double curScore = uncovRatio / (curConsumedTime / 1000);
+    queue.offer(new Pair(operation, curConsumedTime, curScore, currentTime));
 
     // Update the contribution of this method to the total weight of all methods under test.
-    totalWeightOfMethodsUnderTest -= existingWeight;
-    totalWeightOfMethodsUnderTest += wmk;
-
-    return wmk;
+    //    totalWeightOfMethodsUnderTest -= existingWeight;
+    //    totalWeightOfMethodsUnderTest += wmk;
+    return curScore;
   }
 
   /**
