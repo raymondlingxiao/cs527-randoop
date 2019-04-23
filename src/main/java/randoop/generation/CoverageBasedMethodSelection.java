@@ -18,7 +18,7 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
 
   class Pair {
     TypedOperation operation;
-    Double score = 0.0;
+    Double score = 0.5;
     long consumedTime = 0;
     long lastSelectedTime = 0;
 
@@ -248,6 +248,7 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
 
     String methodName = operation.getName().replaceAll("<.*>\\.", ".");
 
+    // System.out.println("Enter coverage tracker:");
     // Corresponds to uncovRatio(m) in the GRT paper.
     Double uncovRatio = coverageTracker.getBranchCoverageForMethod(methodName);
 
@@ -289,11 +290,12 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
               || isFromAbstractClass
               || operationName.equals("java.lang.Object.<init>")
               || operationName.equals("java.lang.Object.getClass");
-      if (!isExpectedToHaveNoCoverage) {
-        System.err.println(
-            "The method " + methodName + " is expected to have coverage info but has none.");
-      }
-      assert isExpectedToHaveNoCoverage;
+      //      if (!isExpectedToHaveNoCoverage) {
+      //        System.err.println(
+      //            "The method " + methodName + " is expected to have coverage info but has
+      // none.");
+      //      }
+      //      assert isExpectedToHaveNoCoverage;
       uncovRatio = 0.5;
     }
 
@@ -327,7 +329,7 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
     //    Double prevScore = selectedPair.score;
     long currentTime = System.currentTimeMillis();
     long curConsumedTime = currentTime - selectedPair.lastSelectedTime + selectedPair.consumedTime;
-    Double curScore = uncovRatio / (curConsumedTime / 1000);
+    Double curScore = uncovRatio * (curConsumedTime / 1000);
     queue.offer(new Pair(operation, curConsumedTime, curScore, currentTime));
 
     // Update the contribution of this method to the total weight of all methods under test.
@@ -343,6 +345,9 @@ public class CoverageBasedMethodSelection implements TypedOperationSelector {
    */
   public void incrementSuccessfulInvocationCount(TypedOperation operation) {
     totalSuccessfulInvocations += 1;
+    if (!methodInvocationCounts.keySet().contains(operation)) {
+      methodInvocationCounts.put(operation, 0);
+    }
     int numSuccessfulInvocations = CollectionsPlume.incrementMap(methodInvocationCounts, operation);
     maxSuccM = Math.max(maxSuccM, numSuccessfulInvocations);
   }
