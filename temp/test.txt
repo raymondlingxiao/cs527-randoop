@@ -1,1 +1,1 @@
-randoop.test_collection.Collections
+randoop.test_collection.C

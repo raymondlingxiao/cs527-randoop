@@ -9,23 +9,8 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.StringJoiner;
-import java.util.StringTokenizer;
+import java.nio.file.*;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -40,96 +25,54 @@ import randoop.MethodReplacements;
 import randoop.condition.RandoopSpecificationError;
 import randoop.condition.SpecificationCollection;
 import randoop.execution.TestEnvironment;
-import randoop.generation.AbstractGenerator;
-import randoop.generation.ComponentManager;
-import randoop.generation.ForwardGenerator;
-import randoop.generation.RandoopGenerationError;
-import randoop.generation.RandoopListenerManager;
-import randoop.generation.SeedSequences;
-import randoop.generation.TestUtils;
+import randoop.generation.*;
 import randoop.instrument.CoveredClassVisitor;
 import randoop.operation.Operation;
 import randoop.operation.OperationParseException;
 import randoop.operation.TypedOperation;
-import randoop.output.CodeWriter;
-import randoop.output.FailingTestFilter;
-import randoop.output.JUnitCreator;
-import randoop.output.JavaFileWriter;
-import randoop.output.MinimizerWriter;
-import randoop.output.NameGenerator;
-import randoop.output.RandoopOutputException;
-import randoop.reflection.DefaultReflectionPredicate;
-import randoop.reflection.OperationModel;
-import randoop.reflection.RandoopInstantiationError;
-import randoop.reflection.RawSignature;
-import randoop.reflection.ReflectionPredicate;
-import randoop.reflection.SignatureParseException;
-import randoop.reflection.VisibilityPredicate;
+import randoop.output.*;
+import randoop.reflection.*;
 import randoop.sequence.ExecutableSequence;
 import randoop.sequence.Sequence;
 import randoop.sequence.SequenceExceptionError;
 import randoop.sequence.SequenceExecutionException;
-import randoop.test.CompilableTestPredicate;
-import randoop.test.ContractCheckingGenerator;
-import randoop.test.ContractSet;
-import randoop.test.ErrorTestPredicate;
-import randoop.test.ExcludeTestPredicate;
-import randoop.test.ExpectedExceptionCheckGen;
-import randoop.test.ExtendGenerator;
-import randoop.test.IncludeIfCoversPredicate;
-import randoop.test.IncludeTestPredicate;
-import randoop.test.RegressionCaptureGenerator;
-import randoop.test.RegressionTestPredicate;
-import randoop.test.TestCheckGenerator;
-import randoop.test.ValidityCheckingGenerator;
+import randoop.test.*;
 import randoop.types.ClassOrInterfaceType;
 import randoop.types.Type;
-import randoop.util.CollectionsExt;
-import randoop.util.Log;
-import randoop.util.MultiMap;
-import randoop.util.Randomness;
-import randoop.util.RandoopLoggingError;
-import randoop.util.ReflectionExecutor;
+import randoop.util.*;
 import randoop.util.predicate.AlwaysFalse;
 
 /** Test generation. */
 public class GenTests extends GenInputsAbstract {
 
+  public static final String TEST_METHOD_NAME_PREFIX = "test";
   // If this is changed, also change RandoopSystemTest.NO_OPERATIONS_TO_TEST
   private static final String NO_OPERATIONS_TO_TEST = "There are no operations to test. Exiting.";
-
   private static final String command = "gentests";
-
   private static final String pitch = "Generates unit tests for a set of classes.";
-
   private static final String commandGrammar = "gentests OPTIONS";
-
   private static final String where =
       "At least one of `--testclass', `--classlist', or `--methodlist' is specified.";
-
   private static final String summary =
       "Uses feedback-directed random test generation to generate "
           + "error-revealing tests and regression tests. ";
-
   private static final String input =
       "One or more names of classes to test. A class to test can be specified "
           + "via the `--testclass=<CLASSNAME>' or `--classlist=<FILENAME>' options.";
-
   private static final String output =
       "Two JUnit test suites (each as one or more Java source files): "
           + "an error-revealing test suite and a regression test suite.";
-
   private static final String example =
       "java randoop.main.Main gentests --testclass=java.util.Collections "
           + "--testclass=java.util.TreeSet";
-
   private static final List<String> notes;
-  public static final String TEST_METHOD_NAME_PREFIX = "test";
-
-  private BlockStmt afterAllFixtureBody;
-  private BlockStmt afterEachFixtureBody;
-  private BlockStmt beforeAllFixtureBody;
-  private BlockStmt beforeEachFixtureBody;
+  private static Options options =
+      new Options(
+          GenTests.class,
+          GenInputsAbstract.class,
+          ReflectionExecutor.class,
+          ForwardGenerator.class,
+          AbstractGenerator.class);
 
   static {
     notes = new ArrayList<>();
@@ -149,19 +92,89 @@ public class GenTests extends GenInputsAbstract {
             + "To get variation across runs, use the --randomseed option.");
   }
 
-  private static Options options =
-      new Options(
-          GenTests.class,
-          GenInputsAbstract.class,
-          ReflectionExecutor.class,
-          ForwardGenerator.class,
-          AbstractGenerator.class);
-
+  private BlockStmt afterAllFixtureBody;
+  private BlockStmt afterEachFixtureBody;
+  private BlockStmt beforeAllFixtureBody;
+  private BlockStmt beforeEachFixtureBody;
   /** The count of sequences that failed to compile. */
   private int sequenceCompileFailureCount = 0;
 
   public GenTests() {
     super(command, pitch, commandGrammar, where, summary, notes, input, output, example, options);
+  }
+
+  /**
+   * Creates the test check generator for this run based on the command-line arguments. The goal of
+   * the generator is to produce all appropriate checks for each sequence it is applied to.
+   *
+   * <p>The generator always contains validity and contract checks. If regression tests are to be
+   * generated, it also contains the regression checks generator.
+   *
+   * @param visibility the visibility predicate
+   * @param contracts the contract checks
+   * @param observerMap the map from types to observer methods
+   * @return the {@code TestCheckGenerator} that reflects command line arguments
+   */
+  public static TestCheckGenerator createTestCheckGenerator(
+      VisibilityPredicate visibility,
+      ContractSet contracts,
+      MultiMap<Type, TypedOperation> observerMap) {
+
+    // Start with checking for invalid exceptions.
+    TestCheckGenerator testGen =
+        new ValidityCheckingGenerator(
+            GenInputsAbstract.flaky_test_behavior == FlakyTestAction.HALT);
+
+    // Extend with contract checker.
+    ContractCheckingGenerator contractVisitor = new ContractCheckingGenerator(contracts);
+    testGen = new ExtendGenerator(testGen, contractVisitor);
+
+    // And, generate regression tests, unless user says not to.
+    if (!GenInputsAbstract.no_regression_tests) {
+      ExpectedExceptionCheckGen expectation = new ExpectedExceptionCheckGen(visibility);
+
+      RegressionCaptureGenerator regressionVisitor =
+          new RegressionCaptureGenerator(
+              expectation, observerMap, visibility, !GenInputsAbstract.no_regression_assertions);
+
+      testGen = new ExtendGenerator(testGen, regressionVisitor);
+    }
+    return testGen;
+  }
+
+  /**
+   * Print message, then print usage information, then exit.
+   *
+   * @param format the string format
+   * @param args the arguments
+   */
+  private static void usage(String format, Object... args) {
+    System.out.print("ERROR: ");
+    System.out.printf(format, args);
+    System.out.println();
+    System.out.println(options.usage());
+    System.exit(-1);
+  }
+
+  /**
+   * Return the text of the given file, as a list of lines. Returns null if the {@code filename}
+   * argument is null. Terminates execution if the {@code filename} file cannot be read.
+   *
+   * @param filename the file to read
+   * @return the contents of {@code filename}, as a list of strings
+   */
+  private static List<String> getFileText(String filename) {
+    if (filename == null) {
+      return null;
+    }
+
+    try {
+      return UtilPlume.fileLines(filename);
+    } catch (IOException e) {
+      System.err.println("Unable to read " + filename);
+      System.exit(1);
+      throw new Error("This can't happen.");
+    }
   }
 
   @Override
@@ -502,7 +515,8 @@ public class GenTests extends GenInputsAbstract {
         testEnvironment.setReplaceCallAgent(agentPath, agentArgs);
       }
 
-      FailingTestFilter codeWriter = new FailingTestFilter(testEnvironment, javaFileWriter);
+      FailingAssertionCommentWriter codeWriter =
+          new FailingAssertionCommentWriter(testEnvironment, javaFileWriter);
       writeTestFiles(
           junitCreator,
           explorer.getRegressionSequences(),
@@ -894,85 +908,11 @@ public class GenTests extends GenInputsAbstract {
   }
 
   /**
-   * Creates the test check generator for this run based on the command-line arguments. The goal of
-   * the generator is to produce all appropriate checks for each sequence it is applied to.
-   *
-   * <p>The generator always contains validity and contract checks. If regression tests are to be
-   * generated, it also contains the regression checks generator.
-   *
-   * @param visibility the visibility predicate
-   * @param contracts the contract checks
-   * @param observerMap the map from types to observer methods
-   * @return the {@code TestCheckGenerator} that reflects command line arguments
-   */
-  public static TestCheckGenerator createTestCheckGenerator(
-      VisibilityPredicate visibility,
-      ContractSet contracts,
-      MultiMap<Type, TypedOperation> observerMap) {
-
-    // Start with checking for invalid exceptions.
-    TestCheckGenerator testGen =
-        new ValidityCheckingGenerator(
-            GenInputsAbstract.flaky_test_behavior == FlakyTestAction.HALT);
-
-    // Extend with contract checker.
-    ContractCheckingGenerator contractVisitor = new ContractCheckingGenerator(contracts);
-    testGen = new ExtendGenerator(testGen, contractVisitor);
-
-    // And, generate regression tests, unless user says not to.
-    if (!GenInputsAbstract.no_regression_tests) {
-      ExpectedExceptionCheckGen expectation = new ExpectedExceptionCheckGen(visibility);
-
-      RegressionCaptureGenerator regressionVisitor =
-          new RegressionCaptureGenerator(
-              expectation, observerMap, visibility, !GenInputsAbstract.no_regression_assertions);
-
-      testGen = new ExtendGenerator(testGen, regressionVisitor);
-    }
-    return testGen;
-  }
-
-  /**
-   * Print message, then print usage information, then exit.
-   *
-   * @param format the string format
-   * @param args the arguments
-   */
-  private static void usage(String format, Object... args) {
-    System.out.print("ERROR: ");
-    System.out.printf(format, args);
-    System.out.println();
-    System.out.println(options.usage());
-    System.exit(-1);
-  }
-
-  /**
-   * Return the text of the given file, as a list of lines. Returns null if the {@code filename}
-   * argument is null. Terminates execution if the {@code filename} file cannot be read.
-   *
-   * @param filename the file to read
-   * @return the contents of {@code filename}, as a list of strings
-   */
-  private static List<String> getFileText(String filename) {
-    if (filename == null) {
-      return null;
-    }
-
-    try {
-      return UtilPlume.fileLines(filename);
-    } catch (IOException e) {
-      System.err.println("Unable to read " + filename);
-      System.exit(1);
-      throw new Error("This can't happen.");
-    }
-  }
-
-  /**
    * Returns the list of JDK specification files from the {@code specifications/jdk} resources
    * directory in the Randoop jar file.
    *
-   * @throws randoop.main.RandoopBug if there is an error locating the specification files
    * @return the list of JDK specification files
+   * @throws randoop.main.RandoopBug if there is an error locating the specification files
    */
   private Collection<? extends Path> getJDKSpecificationFiles() {
     List<Path> fileList = new ArrayList<>();
@@ -995,8 +935,8 @@ public class GenTests extends GenInputsAbstract {
    *
    * @param resourceDirectory the resource directory relative to the root of the jar file, should
    *     start with "/"
-   * @throws randoop.main.RandoopBug if an error occurs when locating the directory
    * @return the {@code Path} for the resource directory
+   * @throws randoop.main.RandoopBug if an error occurs when locating the directory
    */
   private Path getResourceDirectoryPath(String resourceDirectory) {
     URI directoryURI;
@@ -1008,7 +948,7 @@ public class GenTests extends GenInputsAbstract {
 
     FileSystem fileSystem = null;
     try {
-      fileSystem = FileSystems.newFileSystem(directoryURI, Collections.<String, Object>emptyMap());
+      fileSystem = FileSystems.newFileSystem(directoryURI, Collections.emptyMap());
     } catch (IOException e) {
       throw new RandoopBug("Error locating directory " + resourceDirectory, e);
     }
