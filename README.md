@@ -1,33 +1,64 @@
-# Randoop
+# Feedback-directed Random Testing
+* Lingxiao Li (ll14)
+* Chengyu Qian (cq5)
 
-Randoop is a unit test generator for Java.
-It automatically creates unit tests for your classes, in JUnit format.
+## Instructions
 
-## Learn about Randoop:
+### Environment Setup
+* System: `Mac OSX` Version 10.10 and later
+* Java: Version 1.8
+* Python: Version 2.7
+* IDE: `Intelij` IDEA
+* External JAR files:  [jacoco-0.8.3](https://www.eclemma.org/jacoco/)
 
-* [Randoop homepage](https://randoop.github.io/randoop/)
-* [Randoop manual](https://randoop.github.io/randoop/manual/index.html)
-* [Randoop release](https://github.com/randoop/randoop/releases/latest)
-* [Randoop developer's manual](https://randoop.github.io/randoop/manual/dev.html)
-* [Randoop Javadoc](https://randoop.github.io/randoop/api/)
+### Prerequisites
+Run commands below:
+* `sudo apt-get -qqy install git gradle default-jdk`
+* `sudo apt-get -qqy install perl python-pip`
+* `sudo pip install html5validator`
 
-## Directory structure
+### Import project
+* Use command `./gradlew idea` to generate config file.
+* Please use Intelij's auto import and select `gradle` project.
 
-* `agent` - subprojects for Java agents (load-time bytecode rewriting)
-* `gradle` - the Gradle wrapper directory (*Should not be edited*)
-* `lib` - jar files for local copies of libraries not available via Maven
-* `scripts` - git hook scripts
-* `src` - source directories for Randoop, including
-    * `coveredTest` - source for JUnit tests of the covered-class Java agent
-    * `distribution` - resource files for creating the distribution zip file
-    * `docs` - [documentation]("https://randoop.github.io/randoop/"), including the manual and resources
-    * `javadoc` - resource files for creating [API documentation](https://randoop.github.io/randoop/api/)
-    * `main` - Randoop source code
-    * `replacecallTest` - source for JUnit tests of the replacecall Java agent
-    * `systemTest` - source for Randoop system tests
-    * `test` - source for JUnit tests of Randoop
-    * `testInput` - source for libraries used in Randoop testing
+### To Start Generating test cases
+* Use the `randoop_preload/src/getClassesName.java`, specify your subject path in line 9.
+* Obtained the generated `classes.txt`.
+* Copy your subject to `YourRandoopDir/src/main/java/`.
+* Before you run `YourRandoopDir/src/main/java/randoop/main/Main.java` 
+* Prepare VM options command with your jacoco file path: 
 
-The source directories follow the conventions of the Gradle Java plugin, where
-each directory has a _java_ subdirectory containing Java source, and,
-in some cases, a _resources_ subdirectory containing other files.
+        -Xmx8000m
+        -Xbootclasspath/a:/Users/xxx/jacoco-0.8.3/lib
+        -javaagent:/Users/xxx/jacoco-0.8.3/lib/jacocoagent.jar
+* Prepare the Arguments: 
+    1. For the CBMS approach with time limit by seconds:
+       
+            gentests
+            --classlist= txt_has_all_class_names_path
+            --time-limit= 40
+            --flaky-test-behavior=DISCARD
+            --method-selection= CBMS
+            --no-error-revealing-tests=false
+            --regression-test-basename= output_file_name
+    2. For the Unifrom approach:
+    
+            gentests
+            --classlist= txt_has_all_class_names_file
+            --time-limit= 40
+            --flaky-test-behavior=DISCARD
+            --method-selection= Uniform
+            --no-error-revealing-tests=false
+            --regression-test-basename= output_file_name
+* By default, you would get the generated unit test cases java file at the `root` of the randoop project.
+
+### To get branch coverage analysis
+* You could copy the generated unit test files into `YourRandoopDir/test_collection`
+* Or you could use the files under `YourRandoopDir/test_collection`, We've already copied our generated files which are stated in the report.
+* To run with Jacoco:
+    1. Open the Jacoco plugin in the Intelij Idea
+    2. In the `configuration page`, specify your test class name, eg. `randoop.test_collection.jsoupCBMS40_0`
+    3. In the `Coverage page`, choose Jacoco and include the source subject in the block under it.
+    4. Run the plugin and you could find the branch coverage information.
+   
+    
