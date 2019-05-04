@@ -22,9 +22,10 @@ Run commands below:
 * Please use Intelij's auto import and select `gradle` project.
 
 ### To Start Generating test cases
+* *Notice!* You must have all your .java compiled in your subject file
 * Use the `randoop_preload/src/getClassesName.java`, specify your subject path in line 9.
 * Obtained the generated `classes.txt`.
-* Copy your subject to `YourRandoopDir/src/main/java/`.
+* Copy your subject to `YourRandoopDir/src/main/java/`. 
 * Before you run `YourRandoopDir/src/main/java/randoop/main/Main.java` 
 * Prepare VM options command with your jacoco file path: 
 
@@ -35,21 +36,21 @@ Run commands below:
     1. For the CBMS approach with time limit by seconds:
        
             gentests
-            --classlist= txt_has_all_class_names_path
-            --time-limit= 40
+            --classlist=txt_has_all_class_names_path
+            --time-limit=40
             --flaky-test-behavior=DISCARD
-            --method-selection= CBMS
+            --method-selection=CBMS
             --no-error-revealing-tests=false
-            --regression-test-basename= output_file_name
+            --regression-test-basename=output_file_name
     2. For the Unifrom approach:
     
             gentests
-            --classlist= txt_has_all_class_names_file
-            --time-limit= 40
+            --classlist=txt_has_all_class_names_file
+            --time-limit=40
             --flaky-test-behavior=DISCARD
-            --method-selection= Uniform
+            --method-selection=Uniform
             --no-error-revealing-tests=false
-            --regression-test-basename= output_file_name
+            --regression-test-basename=output_file_name
 * By default, you would get the generated unit test cases java file at the `root` of the randoop project.
 
 ### To get branch coverage analysis
