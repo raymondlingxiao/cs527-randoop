@@ -25,6 +25,7 @@ Run commands below:
 * *Notice!* You must have all your .java compiled in your subject file
 * Use the `YourRandoopDir/RandoopPreload/src/getClassesName.java`, specify your subject path in line 9.
 * Obtained the generated `classes.txt`.
+* Copy your `classes.txt` into `YourRandoopDir/ClassToBeTest`.
 * Copy your subject to `YourRandoopDir/src/main/java/`. 
 * Before you run `YourRandoopDir/src/main/java/randoop/main/Main.java` 
 * Prepare VM options command with your jacoco file path: 
