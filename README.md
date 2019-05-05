@@ -33,7 +33,7 @@ Run commands below:
         -Xbootclasspath/a:/Users/xxx/jacoco-0.8.3/lib
         -javaagent:/Users/xxx/jacoco-0.8.3/lib/jacocoagent.jar
 * Prepare the Arguments: 
-    1. For the CBMS approach with time limit by seconds:
+    1. For the CBMS (proposed) approach with time limit by seconds:
        
             gentests
             --classlist=txt_has_all_class_names_path
@@ -42,7 +42,7 @@ Run commands below:
             --method-selection=CBMS
             --no-error-revealing-tests=false
             --regression-test-basename=output_file_name
-    2. For the Unifrom approach:
+    2. For the Unifrom (original) approach:
     
             gentests
             --classlist=txt_has_all_class_names_file
